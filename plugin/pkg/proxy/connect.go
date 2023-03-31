@@ -124,7 +124,12 @@ func (p *Proxy) Connect(ctx context.Context, state request.Request, opts Options
 			// client retry over TCP (if that's supported) or at least receive a clean
 			// error. The connection is still good so we break before the close.
 			if proto == "udp" && strings.Contains(err.Error(), "overflow") {
-				ret.Truncated = true
+				newRet := state.Req.Copy()
+				newRet.AuthenticatedData = false
+				newRet.RecursionAvailable = ret.RecursionAvailable
+				newRet.Response = true
+				newRet.Truncated = true
+				ret = newRet
 				break
 			}
 			pc.c.Close() // not giving it back
