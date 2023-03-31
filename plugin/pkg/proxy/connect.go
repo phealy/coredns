@@ -8,6 +8,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -117,6 +118,15 @@ func (p *Proxy) Connect(ctx context.Context, state request.Request, opts Options
 	for {
 		ret, err = pc.c.ReadMsg()
 		if err != nil {
+			// If the error is an overflow, we probably have a misbehaving upstream
+			// that is sending out-of-spec (>512 byte) UDP responses without an eDNS0
+			// OPT RR. Set the truncate bit and return the result - this will make the
+			// client retry over TCP (if that's supported) or at least receive a clean
+			// error. The connection is still good so we break before the close.
+			if proto == "udp" && strings.Contains(err.Error(), "overflow") {
+				ret.Truncated = true
+				break
+			}
 			pc.c.Close() // not giving it back
 			if err == io.EOF && cached {
 				return nil, ErrCachedClosed
